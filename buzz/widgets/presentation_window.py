@@ -60,17 +60,39 @@ class PresentationWindow(QWidget):
             int
         )
 
+        # Load font families
+        font_family = self.settings.value(
+            Settings.Key.PRESENTATION_WINDOW_FONT_FAMILY,
+            "Arial"
+        )
+        translation_font = self.settings.value(
+            Settings.Key.PRESENTATION_WINDOW_TRANSLATION_FONT_FAMILY,
+            "Arial"
+        )
+
         # Load colors based on theme
         if theme == "light":
             text_color = "#000000"
+            translation_color = "#006400"
             bg_color = "#FFFFFF"
         elif theme == "dark":
             text_color = "#FFFFFF"
+            translation_color = "#90EE90"
             bg_color = "#000000"
         else:
             text_color = self.settings.value(
-                Settings.Key.PRESENTATION_WINDOW_TEXT_COLOR,
-                "#000000"
+                Settings.Key.PRESENTATION_WINDOW_TRANSCRIPTION_COLOR,
+                ""
+            )
+            if text_color == "":
+                text_color = self.settings.value(
+                    Settings.Key.PRESENTATION_WINDOW_TEXT_COLOR,
+                    "#000000"
+                )
+
+            translation_color = self.settings.value(
+                Settings.Key.PRESENTATION_WINDOW_TRANSLATION_COLOR,
+                "#006400"
             )
 
             bg_color = self.settings.value(
@@ -78,7 +100,7 @@ class PresentationWindow(QWidget):
                 "#FFFFFF"
             )
 
-        self.apply_styling(text_color, bg_color, text_size)
+        self.apply_styling(font_family, translation_font, text_color, translation_color, bg_color, text_size)
 
         # Refresh content with new styling
         if self._current_transcript:
@@ -86,8 +108,8 @@ class PresentationWindow(QWidget):
         if self._current_translation:
             self.update_translations(self._current_translation)
 
-    def apply_styling(self, text_color: str, bg_color: str, text_size: int):
-        """Apply text color, background color and font size"""
+    def apply_styling(self, font_family: str, translation_font: str, text_color: str, translation_color: str, bg_color: str, text_size: int):
+        """Apply text color, background color, font family and font size"""
 
         # Load custom CSS if it exists
         css_file_path = self.get_css_file_path()
@@ -99,16 +121,38 @@ class PresentationWindow(QWidget):
             except Exception as e:
                 logging.warning(f"Failed to load custom CSS: {e}")
         else:
-            self.window_style = f"""
+            self._transcript_style = f"""
                 body {{
                     color: {text_color};
                     background-color: {bg_color};
                     font-size: {text_size}pt;
-                    font-family: Arial, sans-serif;
+                    font-family: {font_family};
                     padding: 0;
                     margin: 20px;
                 }}
             """
+            self._translation_style = f"""
+                body {{
+                    color: {translation_color};
+                    background-color: {bg_color};
+                    font-size: {text_size}pt;
+                    font-family: {translation_font};
+                    padding: 0;
+                    margin: 20px;
+                }}
+            """
+
+    def _get_transcript_style(self) -> str:
+        """Get the CSS for transcript display"""
+        if hasattr(self, 'window_style') and self.window_style:
+            return self.window_style
+        return self._transcript_style
+
+    def _get_translation_style(self) -> str:
+        """Get the CSS for translation display"""
+        if hasattr(self, 'window_style') and self.window_style:
+            return self.window_style
+        return self._translation_style
 
     def update_transcripts(self, text: str):
         """Update the transcript display with new text"""
@@ -123,7 +167,7 @@ class PresentationWindow(QWidget):
                     <html>
                         <head>
                             <style>
-                                {self.window_style}
+                                {self._get_transcript_style()}
                             </style>
                         </head>
                         <body>
@@ -150,7 +194,7 @@ class PresentationWindow(QWidget):
                     <html>
                         <head>
                             <style>
-                                {self.window_style}
+                                {self._get_translation_style()}
                             </style>
                         </head>
                         <body>
@@ -185,5 +229,3 @@ class PresentationWindow(QWidget):
         os.makedirs(cache_dir, exist_ok=True)
 
         return os.path.join(cache_dir, "presentation_window_style.css")
-
-

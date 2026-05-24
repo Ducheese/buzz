@@ -24,7 +24,8 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QLabel,
     QSpinBox,
-    QColorDialog
+    QColorDialog,
+    QFontComboBox,
 )
 
 from buzz.dialogs import show_model_download_error_dialog
@@ -149,6 +150,14 @@ class RecordingTranscriberWidget(QWidget):
             llm_prompt=self.settings.value(
                 key=Settings.Key.RECORDING_TRANSCRIBER_LLM_PROMPT, default_value=""
             ),
+            enable_vad=self.settings.value(
+                key=Settings.Key.RECORDING_TRANSCRIBER_ENABLE_VAD,
+                default_value=False,
+            ),
+            vad_threshold=self.settings.value(
+                key=Settings.Key.RECORDING_TRANSCRIBER_VAD_THRESHOLD,
+                default_value=0.5,
+            ),
             silence_threshold=self.settings.value(
                 key=Settings.Key.RECORDING_TRANSCRIBER_SILENCE_THRESHOLD,
                 default_value=0.0025,
@@ -157,9 +166,9 @@ class RecordingTranscriberWidget(QWidget):
                 key=Settings.Key.RECORDING_TRANSCRIBER_LINE_SEPARATOR,
                 default_value="\n\n",
             ),
-            transcription_step=self.settings.value(
-                key=Settings.Key.RECORDING_TRANSCRIBER_TRANSCRIPTION_STEP,
-                default_value=3.5,
+            segment_length=self.settings.value(
+                key=Settings.Key.RECORDING_TRANSCRIBER_SEGMENT_LENGTH,
+                default_value=5.0,
             ),
         )
 
@@ -237,9 +246,46 @@ class RecordingTranscriberWidget(QWidget):
         self.presentation_options_bar = self.create_presentation_options_bar()
         layout.insertWidget(3, self.presentation_options_bar)
         self.presentation_options_bar.hide()
+
+        self.pres_row2 = self._create_pres_row(True)
+        layout.insertWidget(4, self.pres_row2)
+        self.pres_row2.hide()
+
+        self.pres_row3 = self._create_pres_row(False)
+        layout.insertWidget(5, self.pres_row3)
+        self.pres_row3.hide()
         self.copy_actions_bar = self.create_copy_actions_bar()
         layout.addWidget(self.copy_actions_bar)  # Add at the bottom
         self.copy_actions_bar.hide()
+
+    def _create_pres_row(self, is_transcription: bool) -> QWidget:
+        bar = QWidget(self)
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(5, 0, 5, 0)
+        h.addStretch()
+        if is_transcription:
+            self.trans_font_combo = QFontComboBox(bar)
+            saved = self.settings.value(Settings.Key.PRESENTATION_WINDOW_FONT_FAMILY, "Arial")
+            self.trans_font_combo.setCurrentFont(self._font_by_family(saved))
+            self.trans_font_combo.currentFontChanged.connect(self.on_trans_font_changed)
+            h.addWidget(self.trans_font_combo)
+            self.trans_color_button = QPushButton(bar)
+            self.trans_color_button.setIcon(TextColorIcon(bar))
+            self.trans_color_button.setToolTip(_("Transcription Color"))
+            self.trans_color_button.clicked.connect(self.on_trans_color_clicked)
+            h.addWidget(self.trans_color_button)
+        else:
+            self.transl_font_combo = QFontComboBox(bar)
+            saved = self.settings.value(Settings.Key.PRESENTATION_WINDOW_TRANSLATION_FONT_FAMILY, "Arial")
+            self.transl_font_combo.setCurrentFont(self._font_by_family(saved))
+            self.transl_font_combo.currentFontChanged.connect(self.on_transl_font_changed)
+            h.addWidget(self.transl_font_combo)
+            self.transl_color_button = QPushButton(bar)
+            self.transl_color_button.setIcon(TextColorIcon(bar))
+            self.transl_color_button.setToolTip(_("Translation Color"))
+            self.transl_color_button.clicked.connect(self.on_transl_color_clicked)
+            h.addWidget(self.transl_color_button)
+        return bar
 
     def create_presentation_options_bar(self) -> QWidget:
         """Crete the presentation options bar widget"""
@@ -407,17 +453,30 @@ class RecordingTranscriberWidget(QWidget):
         selected_theme = theme[index]
         self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_THEME, selected_theme)
 
-        #Show/hide color buttons based on selection
-        if selected_theme == "custom":
-            self.text_color_button.show()
-            self.bg_color_button.show()
-        else:
-            self.text_color_button.hide()
-            self.bg_color_button.hide()
+        is_custom = selected_theme == "custom"
+        self.text_color_button.setVisible(is_custom)
+        self.bg_color_button.setVisible(is_custom)
+        # pres extras visibility handled by _show_pres_extras/_hide_pres_extras
+        # which are called when recording state changes
 
         # Apply theme to presentation window
         if self.presentation_window:
             self.presentation_window.load_settings()
+
+    def _show_pres_extras(self):
+        if self.settings.value(Settings.Key.PRESENTATION_WINDOW_THEME, "light") == "custom":
+            self.pres_row2.show()
+            self.pres_row3.show()
+
+    def _hide_pres_extras(self):
+        self.pres_row2.hide()
+        self.pres_row3.hide()
+
+    @staticmethod
+    def _font_by_family(family: str):
+        from PyQt6.QtGui import QFont
+        f = QFont(family)
+        return f
 
     def on_text_color_clicked(self):
         """Handle text color button click"""
@@ -433,6 +492,7 @@ class RecordingTranscriberWidget(QWidget):
         if color.isValid():
             color_hex = color.name()
             self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_TEXT_COLOR, color_hex)
+            self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_TRANSCRIPTION_COLOR, color_hex)
             if self.presentation_window:
                 self.presentation_window.load_settings()
 
@@ -450,6 +510,46 @@ class RecordingTranscriberWidget(QWidget):
         if color.isValid():
             color_hex = color.name()
             self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_BACKGROUND_COLOR, color_hex)
+            if self.presentation_window:
+                self.presentation_window.load_settings()
+
+    def on_trans_font_changed(self, font):
+        """Handle transcription font change"""
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_FONT_FAMILY, font.family())
+        if self.presentation_window:
+            self.presentation_window.load_settings()
+
+    def on_transl_font_changed(self, font):
+        """Handle translation font change"""
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_TRANSLATION_FONT_FAMILY, font.family())
+        if self.presentation_window:
+            self.presentation_window.load_settings()
+
+    def on_trans_color_clicked(self):
+        """Handle transcription color button click"""
+        current_color = QColor(
+            self.settings.value(
+                Settings.Key.PRESENTATION_WINDOW_TRANSCRIPTION_COLOR,
+                "#000000"
+            )
+        )
+        color = QColorDialog.getColor(current_color, self, _("Select Transcription Color"))
+        if color.isValid():
+            self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_TRANSCRIPTION_COLOR, color.name())
+            if self.presentation_window:
+                self.presentation_window.load_settings()
+
+    def on_transl_color_clicked(self):
+        """Handle translation color button click"""
+        current_color = QColor(
+            self.settings.value(
+                Settings.Key.PRESENTATION_WINDOW_TRANSLATION_COLOR,
+                "#006400"
+            )
+        )
+        color = QColorDialog.getColor(current_color, self, _("Select Translation Color"))
+        if color.isValid():
+            self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_TRANSLATION_COLOR, color.name())
             if self.presentation_window:
                 self.presentation_window.load_settings()
 
@@ -590,12 +690,14 @@ class RecordingTranscriberWidget(QWidget):
             self.audio_devices_combo_box.setEnabled(False)
             self.microphone_label.setEnabled(False)
             self.presentation_options_bar.show()
+            self._show_pres_extras()
             self.copy_actions_bar.hide()
 
         else:  # RecordingStatus.RECORDING
             self.stop_recording()
             self.set_recording_status_stopped()
             self.presentation_options_bar.hide()
+            self._hide_pres_extras()
 
     def start_recording(self):
         self.record_button.setDisabled(True)
@@ -737,6 +839,7 @@ class RecordingTranscriberWidget(QWidget):
         self.audio_devices_combo_box.setEnabled(True)
         self.microphone_label.setEnabled(True)
         self.presentation_options_bar.hide()
+        self._hide_pres_extras()
         self.copy_actions_bar.show() #added this here
 
     def on_download_model_error(self, error: str):
@@ -1221,6 +1324,14 @@ class RecordingTranscriberWidget(QWidget):
             self.transcription_options.llm_prompt,
         )
         self.settings.set_value(
+            Settings.Key.RECORDING_TRANSCRIBER_ENABLE_VAD,
+            self.transcription_options.enable_vad,
+        )
+        self.settings.set_value(
+            Settings.Key.RECORDING_TRANSCRIBER_VAD_THRESHOLD,
+            self.transcription_options.vad_threshold,
+        )
+        self.settings.set_value(
             Settings.Key.RECORDING_TRANSCRIBER_SILENCE_THRESHOLD,
             self.transcription_options.silence_threshold,
         )
@@ -1229,6 +1340,6 @@ class RecordingTranscriberWidget(QWidget):
             self.transcription_options.line_separator,
         )
         self.settings.set_value(
-            Settings.Key.RECORDING_TRANSCRIBER_TRANSCRIPTION_STEP,
-            self.transcription_options.transcription_step,
+            Settings.Key.RECORDING_TRANSCRIBER_SEGMENT_LENGTH,
+            self.transcription_options.segment_length,
         )

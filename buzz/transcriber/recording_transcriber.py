@@ -62,10 +62,9 @@ class RecordingTranscriber(QObject):
         self.input_device_index = input_device_index
         self.sample_rate = sample_rate if sample_rate is not None else whisper_audio.SAMPLE_RATE
         self.model_path = model_path
-        self.n_batch_samples = int(5 * self.sample_rate)  # 5 seconds
+        self.n_batch_samples = int(transcription_options.segment_length * self.sample_rate)
         self.keep_sample_seconds = 0.15
         if self.transcriber_mode == RecordingTranscriberMode.APPEND_AND_CORRECT:
-            self.n_batch_samples = int(transcription_options.transcription_step * self.sample_rate)
             self.keep_sample_seconds = 1.5
         # pause queueing if more than 3 batches behind
         self.max_queue_size = 3 * self.n_batch_samples
@@ -78,6 +77,7 @@ class RecordingTranscriber(QObject):
         )
         self.process = None
         self._stderr_lines: list[bytes] = []
+        self.vad_model = None
 
     def start(self):
         self.is_running = True
@@ -158,6 +158,15 @@ class RecordingTranscriber(QObject):
             self.input_device_index,
         )
 
+        # Load Silero VAD model if enabled
+        if self.transcription_options.enable_vad:
+            try:
+                from silero_vad import load_silero_vad
+                self.vad_model = load_silero_vad()
+                logging.debug("Silero VAD model loaded successfully")
+            except Exception as exc:
+                logging.warning(f"Failed to load Silero VAD model: {exc}")
+
         try:
             with self.sounddevice.InputStream(
                 samplerate=self.sample_rate,
@@ -190,7 +199,13 @@ class RecordingTranscriber(QObject):
                             amplitude,
                         )
 
-                        if amplitude < self.transcription_options.silence_threshold:
+                        # VAD gate: VAD enabled → use Silero VAD, otherwise use RMS threshold
+                        if self.transcription_options.enable_vad and self.vad_model is not None:
+                            if not self._has_speech(samples):
+                                logging.debug("VAD: no speech detected, skipping")
+                                time.sleep(0.5)
+                                continue
+                        elif amplitude < self.transcription_options.silence_threshold:
                             time.sleep(0.5)
                             continue
 
@@ -396,6 +411,23 @@ class RecordingTranscriber(QObject):
     @staticmethod
     def amplitude(arr: np.ndarray):
         return float(np.sqrt(np.mean(arr**2)))
+
+    def _has_speech(self, samples: np.ndarray) -> bool:
+        """Run Silero VAD on the sample buffer. Returns True if speech is detected."""
+        try:
+            from silero_vad import get_speech_timestamps
+            audio_tensor = torch.from_numpy(samples).float()
+            timestamps = get_speech_timestamps(
+                audio_tensor, self.vad_model,
+                threshold=self.transcription_options.vad_threshold,
+                sampling_rate=16000,
+                min_speech_duration_ms=100,
+                min_silence_duration_ms=100,
+            )
+            return len(timestamps) > 0
+        except Exception as exc:
+            logging.warning(f"VAD inference error: {exc}")
+            return True  # On error, let the audio through
 
     def _drain_stderr(self):
         if self.process and self.process.stderr:

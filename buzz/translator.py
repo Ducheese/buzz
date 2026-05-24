@@ -66,6 +66,7 @@ class Translator(QObject):
                     {"role": "user", "content": transcript}
                 ],
                 timeout=60.0,
+                extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception as e:
             completion = None
@@ -103,6 +104,7 @@ class Translator(QObject):
                     {"role": "user", "content": combined}
                 ],
                 timeout=60.0,
+                extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception as e:
             completion = None

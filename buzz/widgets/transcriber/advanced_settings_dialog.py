@@ -125,6 +125,23 @@ class AdvancedSettingsDialog(QDialog):
             self.silence_threshold_spin_box.valueChanged.connect(self.on_silence_threshold_changed)
             self.silence_threshold_spin_box.setFixedWidth(90)
             layout.addRow(_("Silence threshold:"), self.silence_threshold_spin_box)
+            self.silence_threshold_label = layout.labelForField(self.silence_threshold_spin_box)
+
+            # VAD enable
+            self.enable_vad_checkbox = QCheckBox(_("Enable VAD"))
+            self.enable_vad_checkbox.setChecked(self.transcription_options.enable_vad)
+            self.enable_vad_checkbox.stateChanged.connect(self.on_vad_enabled_changed)
+            layout.addRow("", self.enable_vad_checkbox)
+
+            self.vad_threshold_spin_box = QDoubleSpinBox(self)
+            self.vad_threshold_spin_box.setRange(0.0, 1.0)
+            self.vad_threshold_spin_box.setSingleStep(0.05)
+            self.vad_threshold_spin_box.setDecimals(2)
+            self.vad_threshold_spin_box.setValue(self.transcription_options.vad_threshold)
+            self.vad_threshold_spin_box.setEnabled(self.transcription_options.enable_vad)
+            self.vad_threshold_spin_box.valueChanged.connect(self.on_vad_threshold_changed)
+            self.vad_threshold_spin_box.setFixedWidth(90)
+            layout.addRow(_("VAD threshold:"), self.vad_threshold_spin_box)
 
             # Live recording mode
             self.recording_mode_combo = QComboBox(self)
@@ -144,15 +161,15 @@ class AdvancedSettingsDialog(QDialog):
             self.line_separator_label = QLabel(_("Line separator:"))
             layout.addRow(self.line_separator_label, self.line_separator_line_edit)
 
-            self.transcription_step_spin_box = QDoubleSpinBox(self)
-            self.transcription_step_spin_box.setRange(2.0, 5.0)
-            self.transcription_step_spin_box.setSingleStep(0.1)
-            self.transcription_step_spin_box.setDecimals(1)
-            self.transcription_step_spin_box.setValue(transcription_options.transcription_step)
-            self.transcription_step_spin_box.valueChanged.connect(self.on_transcription_step_changed)
-            self.transcription_step_spin_box.setFixedWidth(80)
-            self.transcription_step_label = QLabel(_("Transcription step:"))
-            layout.addRow(self.transcription_step_label, self.transcription_step_spin_box)
+            self.segment_length_spin_box = QDoubleSpinBox(self)
+            self.segment_length_spin_box.setRange(1.0, 5.0)
+            self.segment_length_spin_box.setSingleStep(0.1)
+            self.segment_length_spin_box.setDecimals(1)
+            self.segment_length_spin_box.setValue(transcription_options.segment_length)
+            self.segment_length_spin_box.valueChanged.connect(self.on_segment_length_changed)
+            self.segment_length_spin_box.setFixedWidth(80)
+            self.segment_length_label = QLabel(_("Segment length (s):"))
+            layout.addRow(self.segment_length_label, self.segment_length_spin_box)
 
             hide_unconfirmed = self.settings.value(
                 Settings.Key.RECORDING_TRANSCRIBER_HIDE_UNCONFIRMED, True
@@ -240,7 +257,7 @@ class AdvancedSettingsDialog(QDialog):
                 self.line_separator_line_edit,
                 self.silence_threshold_spin_box,
                 self.recording_mode_combo,
-                self.transcription_step_spin_box,
+                self.segment_length_spin_box,
                 self.export_file_type_combo,
                 self.export_max_entries_spin,
             ):
@@ -309,13 +326,23 @@ class AdvancedSettingsDialog(QDialog):
         is_append_and_correct = mode == RecordingTranscriberMode.APPEND_AND_CORRECT
         self.line_separator_label.setVisible(not is_append_and_correct)
         self.line_separator_line_edit.setVisible(not is_append_and_correct)
-        self.transcription_step_label.setVisible(is_append_and_correct)
-        self.transcription_step_spin_box.setVisible(is_append_and_correct)
         self.hide_unconfirmed_label.setVisible(is_append_and_correct)
         self.hide_unconfirmed_checkbox.setVisible(is_append_and_correct)
 
-    def on_transcription_step_changed(self, value: float):
-        self.transcription_options.transcription_step = round(value, 1)
+    def on_segment_length_changed(self, value: float):
+        self.transcription_options.segment_length = round(value, 1)
+        self.transcription_options_changed.emit(self.transcription_options)
+
+    def on_vad_enabled_changed(self, state: int):
+        self.transcription_options.enable_vad = state == 2
+        self.transcription_options_changed.emit(self.transcription_options)
+        self.vad_threshold_spin_box.setEnabled(self.transcription_options.enable_vad)
+        silenced = self.transcription_options.enable_vad
+        self.silence_threshold_label.setVisible(not silenced)
+        self.silence_threshold_spin_box.setVisible(not silenced)
+
+    def on_vad_threshold_changed(self, value: float):
+        self.transcription_options.vad_threshold = round(value, 2)
         self.transcription_options_changed.emit(self.transcription_options)
 
     def on_hide_unconfirmed_changed(self, state: int):

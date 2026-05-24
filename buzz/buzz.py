@@ -94,6 +94,9 @@ def main():
         stdout_handler.setFormatter(logging.Formatter(log_format))
         logging.getLogger().addHandler(stdout_handler)
 
+    # Pre-initialize ctranslate2 before QApplication creates internal threads
+    import faster_whisper  # noqa: F401
+
     from buzz.cli import parse_command_line
     from buzz.widgets.application import Application
 
