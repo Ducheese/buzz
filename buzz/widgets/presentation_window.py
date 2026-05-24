@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QByteArray
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextBrowser
 from platformdirs import user_cache_dir
@@ -19,12 +19,20 @@ class PresentationWindow(QWidget):
         self.settings = Settings()
         self._current_transcript = ""
         self._current_translation = ""
+        self._saved_single_t = ""
+        self._saved_single_x = ""
+        self._saved_single_sep = "\n\n"
         self.window_style = ""
         self.setWindowTitle(_("Live Transcript Presentation"))
         self.setWindowFlag(Qt.WindowType.Window)
 
         # Window size
         self.resize(800, 600)
+
+        # Restore geometry
+        geo = self.settings.value(Settings.Key.PRESENTATION_WINDOW_GEOMETRY, "", str)
+        if geo:
+            self.restoreGeometry(QByteArray.fromBase64(geo.encode()))
 
         # Create layout
         layout = QVBoxLayout(self)
@@ -34,10 +42,12 @@ class PresentationWindow(QWidget):
         # Text display widget
         self.transcript_display = QTextBrowser(self)
         self.transcript_display.setReadOnly(True)
+        self.transcript_display.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         # Translation display (hidden first)
         self.translation_display = QTextBrowser(self)
         self.translation_display.setReadOnly(True)
+        self.translation_display.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.translation_display.hide()
 
         # Add to layout
@@ -45,6 +55,13 @@ class PresentationWindow(QWidget):
         layout.addWidget(self.translation_display)
 
         self.load_settings()
+
+    def closeEvent(self, event):
+        self.settings.set_value(
+            Settings.Key.PRESENTATION_WINDOW_GEOMETRY,
+            self.saveGeometry().toBase64().data().decode(),
+        )
+        super().closeEvent(event)
 
     def load_settings(self):
         """Load and apply saved presentation settings"""
@@ -107,6 +124,30 @@ class PresentationWindow(QWidget):
             self.update_transcripts(self._current_transcript)
         if self._current_translation:
             self.update_translations(self._current_translation)
+
+        # Window flags
+        self._apply_flag(Qt.WindowType.WindowStaysOnTopHint,
+                          self.settings.value(Settings.Key.PRESENTATION_WINDOW_ALWAYS_ON_TOP, False))
+        self._apply_flag(Qt.WindowType.FramelessWindowHint,
+                          self.settings.value(Settings.Key.PRESENTATION_WINDOW_HIDE_BORDER, False))
+        self.setWindowOpacity(
+            self.settings.value(Settings.Key.PRESENTATION_WINDOW_OPACITY, 1.0, float))
+
+        # Re-apply single mode if active
+        if (self._saved_single_t or self._saved_single_x) and \
+           self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split") == "single":
+            self._render_interleaved()
+
+    def _apply_flag(self, flag: Qt.WindowType, on: bool):
+        current = self.windowFlags()
+        if on:
+            if not (current & flag):
+                self.setWindowFlags(current | flag)
+                self.show()
+        else:
+            if current & flag:
+                self.setWindowFlags(current & ~flag)
+                self.show()
 
     def apply_styling(self, font_family: str, translation_font: str, text_color: str, translation_color: str, bg_color: str, text_size: int):
         """Apply text color, background color, font family and font size"""
@@ -205,6 +246,45 @@ class PresentationWindow(QWidget):
 
         self.translation_display.setHtml(html_content)
         self.translation_display.moveCursor(QTextCursor.MoveOperation.End)
+
+    def set_interleaved(self, transcript_text: str, translation_text: str, line_sep: str):
+        self._saved_single_t = transcript_text
+        self._saved_single_x = translation_text
+        self._saved_single_sep = line_sep
+        self._render_interleaved()
+
+    def _render_interleaved(self):
+        import re
+        def _extract(css: str, prop: str) -> str:
+            m = re.search(rf'{prop}:\s*([^;]+);', css)
+            return m.group(1).strip() if m else ""
+
+        t_color = _extract(self._transcript_style, "color")
+        t_font = _extract(self._transcript_style, "font-family")
+        t_size = _extract(self._transcript_style, "font-size")
+        x_color = _extract(self._translation_style, "color")
+        x_font = _extract(self._translation_style, "font-family")
+        x_size = _extract(self._translation_style, "font-size")
+        bg = _extract(self._transcript_style, "background-color") or "#000"
+
+        t_lines = self._saved_single_t.split(self._saved_single_sep) if self._saved_single_t else []
+        x_lines = self._saved_single_x.split(self._saved_single_sep) if self._saved_single_x else []
+
+        def esc(s: str) -> str:
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        parts = []
+        for i in range(max(len(t_lines), len(x_lines))):
+            if i < len(t_lines) and t_lines[i]:
+                parts.append(f'<span style="color:{t_color};font-family:{t_font};font-size:{t_size}">{esc(t_lines[i])}</span>')
+            if i < len(x_lines) and x_lines[i]:
+                parts.append(f'<span style="color:{x_color};font-family:{x_font};font-size:{x_size}">{esc(x_lines[i])}</span>')
+
+        html = "<br>".join(parts)
+        self.translation_display.hide()
+        self.transcript_display.show()
+        self.transcript_display.setHtml(
+            f'<html><body style="background:{bg}">{html}</body></html>')
+        self.transcript_display.moveCursor(QTextCursor.MoveOperation.End)
 
     def toggle_fullscreen(self):
         """Toggle fullscreen mode"""

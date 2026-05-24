@@ -26,6 +26,8 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QColorDialog,
     QFontComboBox,
+    QCheckBox,
+    QDoubleSpinBox,
 )
 
 from buzz.dialogs import show_model_download_error_dialog
@@ -258,9 +260,54 @@ class RecordingTranscriberWidget(QWidget):
         self.pres_row3 = self._create_pres_row(False)
         layout.insertWidget(5, self.pres_row3)
         self.pres_row3.hide()
+
+        self.pres_row4 = self._create_pres_row4()
+        layout.insertWidget(6, self.pres_row4)
+        self.pres_row4.hide()
+
         self.copy_actions_bar = self.create_copy_actions_bar()
         layout.addWidget(self.copy_actions_bar)  # Add at the bottom
         self.copy_actions_bar.hide()
+
+    def _create_pres_row4(self) -> QWidget:
+        bar = QWidget(self)
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(5, 0, 5, 0)
+        h.addStretch()
+
+        self.pin_cb = QCheckBox(_("Pin on Top"), bar)
+        self.pin_cb.setChecked(
+            self.settings.value(Settings.Key.PRESENTATION_WINDOW_ALWAYS_ON_TOP, False))
+        self.pin_cb.stateChanged.connect(self.on_pin_changed)
+        h.addWidget(self.pin_cb)
+
+        self.borderless_cb = QCheckBox(_("Hide Border"), bar)
+        self.borderless_cb.setChecked(
+            self.settings.value(Settings.Key.PRESENTATION_WINDOW_HIDE_BORDER, False))
+        self.borderless_cb.stateChanged.connect(self.on_borderless_changed)
+        h.addWidget(self.borderless_cb)
+
+        h.addWidget(QLabel(_("Opacity:"), bar))
+        self.opacity_spin = QDoubleSpinBox(bar)
+        self.opacity_spin.setRange(0.1, 1.0)
+        self.opacity_spin.setSingleStep(0.05)
+        self.opacity_spin.setDecimals(2)
+        self.opacity_spin.setValue(
+            self.settings.value(Settings.Key.PRESENTATION_WINDOW_OPACITY, 1.0, float))
+        self.opacity_spin.setFixedWidth(70)
+        self.opacity_spin.valueChanged.connect(self.on_opacity_changed)
+        h.addWidget(self.opacity_spin)
+
+        h.addWidget(QLabel(_("Mode:"), bar))
+        self.mode_combo = QComboBox(bar)
+        self.mode_combo.addItems(["Split", "Single"])
+        saved = self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split")
+        self.mode_combo.setCurrentIndex(0 if saved == "split" else 1)
+        if self.transcriber_mode == RecordingTranscriberMode.APPEND_AND_CORRECT:
+            self.mode_combo.model().item(1).setEnabled(False)
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        h.addWidget(self.mode_combo)
+        return bar
 
     def _create_pres_row(self, is_transcription: bool) -> QWidget:
         bar = QWidget(self)
@@ -421,21 +468,14 @@ class RecordingTranscriberWidget(QWidget):
         """Handle click on 'Show in new window' button"""
         if self.presentation_window is None or not self.presentation_window.isVisible():
             #Create new presentation window
-            self.presentation_window = PresentationWindow(self)
+            self.presentation_window = PresentationWindow()
             self.presentation_window.show()
 
             #Enable fullscreen button
             self.fullscreen_button.setEnabled(True)
 
             #Sync current content to presentation window
-            transcript_text = self.transcription_text_box.toPlainText()
-            if transcript_text:
-                self.presentation_window.update_transcripts(transcript_text)
-
-            if self.transcription_options.enable_llm_translation:
-                translation_text = self.translation_text_box.toPlainText()
-                if translation_text:
-                    self.presentation_window.update_translations(translation_text)
+            self._sync_presentation()
         else:
             #Window already open, bring to front
             self.presentation_window.raise_()
@@ -471,10 +511,12 @@ class RecordingTranscriberWidget(QWidget):
         if self.settings.value(Settings.Key.PRESENTATION_WINDOW_THEME, "light") == "custom":
             self.pres_row2.show()
             self.pres_row3.show()
+        self.pres_row4.show()
 
     def _hide_pres_extras(self):
         self.pres_row2.hide()
         self.pres_row3.hide()
+        self.pres_row4.hide()
 
     @staticmethod
     def _font_by_family(family: str):
@@ -562,6 +604,45 @@ class RecordingTranscriberWidget(QWidget):
         if self.presentation_window:
             self.presentation_window.toggle_fullscreen()
 
+    def on_pin_changed(self, state: int):
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_ALWAYS_ON_TOP, state == 2)
+        if self.presentation_window:
+            self.presentation_window._apply_flag(Qt.WindowType.WindowStaysOnTopHint, state == 2)
+
+    def on_borderless_changed(self, state: int):
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_HIDE_BORDER, state == 2)
+        if self.presentation_window:
+            self.presentation_window._apply_flag(Qt.WindowType.FramelessWindowHint, state == 2)
+
+    def on_opacity_changed(self, value: float):
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_OPACITY, value)
+        if self.presentation_window:
+            self.presentation_window.setWindowOpacity(value)
+
+    def on_mode_changed(self, index: int):
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_MODE,
+                                "split" if index == 0 else "single")
+        if self.presentation_window:
+            self.presentation_window.load_settings()
+
+    def _sync_presentation(self):
+        if not self.presentation_window or not self.presentation_window.isVisible():
+            return
+        mode = self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split")
+        if mode == "single" and self.transcription_options.enable_llm_translation:
+            self.presentation_window.set_interleaved(
+                self.transcription_text_box.toPlainText(),
+                self.translation_text_box.toPlainText(),
+                self.transcription_options.line_separator)
+        else:
+            t = self.transcription_text_box.toPlainText()
+            if t:
+                self.presentation_window.update_transcripts(t)
+            if self.transcription_options.enable_llm_translation:
+                x = self.translation_text_box.toPlainText()
+                if x:
+                    self.presentation_window.update_translations(x)
+
     def setup_for_export(self):
         export_folder = self.settings.value(
             key=Settings.Key.RECORDING_TRANSCRIBER_EXPORT_FOLDER,
@@ -613,6 +694,9 @@ class RecordingTranscriberWidget(QWidget):
 
     def on_recording_mode_changed(self, mode: RecordingTranscriberMode):
         self.transcriber_mode = mode
+        if hasattr(self, 'mode_combo'):
+            self.mode_combo.model().item(1).setEnabled(
+                mode != RecordingTranscriberMode.APPEND_AND_CORRECT)
 
     def on_hide_unconfirmed_changed(self, value: bool):
         self.hide_unconfirmed = value
@@ -1098,9 +1182,7 @@ class RecordingTranscriberWidget(QWidget):
 
         #Update presentation window if it is open
         if self.presentation_window and self.presentation_window.isVisible():
-            #Get current merged text from the translation box
-            current_text = self.transcription_text_box.toPlainText()
-            self.presentation_window.update_transcripts(current_text)
+            self._sync_presentation()
 
         # Upload to server
         if self.upload_url:
@@ -1165,8 +1247,7 @@ class RecordingTranscriberWidget(QWidget):
             self.process_transcription_merge(text, self.translations, self.translation_text_box, self.translation_export_file)
 
         if self.presentation_window and self.presentation_window.isVisible():
-            current_translation = self.translation_text_box.toPlainText()
-            self.presentation_window.update_translations(current_translation)
+            self._sync_presentation()
 
         # Upload to server
         if self.upload_url:

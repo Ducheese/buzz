@@ -43,6 +43,11 @@ class Settings:
         PRESENTATION_WINDOW_TRANSLATION_FONT_FAMILY = "presentation-window/translation-font-family"
         PRESENTATION_WINDOW_TRANSCRIPTION_COLOR = "presentation-window/transcription-color"
         PRESENTATION_WINDOW_TRANSLATION_COLOR = "presentation-window/translation-color"
+        PRESENTATION_WINDOW_ALWAYS_ON_TOP = "presentation-window/always-on-top"
+        PRESENTATION_WINDOW_OPACITY = "presentation-window/opacity"
+        PRESENTATION_WINDOW_HIDE_BORDER = "presentation-window/hide-border"
+        PRESENTATION_WINDOW_GEOMETRY = "presentation-window/geometry"
+        PRESENTATION_WINDOW_MODE = "presentation-window/mode"
 
         FILE_TRANSCRIBER_TASK = "file-transcriber/task"
         FILE_TRANSCRIBER_MODEL = "file-transcriber/model"
