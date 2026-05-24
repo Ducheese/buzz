@@ -27,6 +27,7 @@ class Settings:
         RECORDING_TRANSCRIBER_ENABLE_VAD = "recording-transcriber/enable-vad"
         RECORDING_TRANSCRIBER_VAD_THRESHOLD = "recording-transcriber/vad-threshold"
         RECORDING_TRANSCRIBER_SEGMENT_LENGTH = "recording-transcriber/segment-length"
+        RECORDING_TRANSCRIBER_OVERLAP_SECONDS = "recording-transcriber/overlap-seconds"
         RECORDING_TRANSCRIBER_SILENCE_THRESHOLD = "recording-transcriber/silence-threshold"
         RECORDING_TRANSCRIBER_LINE_SEPARATOR = "recording-transcriber/line-separator"
         RECORDING_TRANSCRIBER_EXPORT_FILE_TYPE = "recording-transcriber/export-file-type"

@@ -143,6 +143,10 @@ class AdvancedSettingsDialog(QDialog):
             self.vad_threshold_spin_box.setFixedWidth(90)
             layout.addRow(_("VAD threshold:"), self.vad_threshold_spin_box)
 
+            # Apply initial enable state based on saved VAD state
+            self.silence_threshold_label.setEnabled(not self.transcription_options.enable_vad)
+            self.silence_threshold_spin_box.setEnabled(not self.transcription_options.enable_vad)
+
             # Live recording mode
             self.recording_mode_combo = QComboBox(self)
             for mode in RecordingTranscriberMode:
@@ -170,6 +174,15 @@ class AdvancedSettingsDialog(QDialog):
             self.segment_length_spin_box.setFixedWidth(80)
             self.segment_length_label = QLabel(_("Segment length (s):"))
             layout.addRow(self.segment_length_label, self.segment_length_spin_box)
+
+            self.overlap_spin_box = QDoubleSpinBox(self)
+            self.overlap_spin_box.setRange(0.0, 1.5)
+            self.overlap_spin_box.setSingleStep(0.1)
+            self.overlap_spin_box.setDecimals(1)
+            self.overlap_spin_box.setValue(transcription_options.overlap_seconds)
+            self.overlap_spin_box.valueChanged.connect(self.on_overlap_changed)
+            self.overlap_spin_box.setFixedWidth(80)
+            layout.addRow(_("Overlap (s):"), self.overlap_spin_box)
 
             hide_unconfirmed = self.settings.value(
                 Settings.Key.RECORDING_TRANSCRIBER_HIDE_UNCONFIRMED, True
@@ -333,13 +346,17 @@ class AdvancedSettingsDialog(QDialog):
         self.transcription_options.segment_length = round(value, 1)
         self.transcription_options_changed.emit(self.transcription_options)
 
+    def on_overlap_changed(self, value: float):
+        self.transcription_options.overlap_seconds = round(value, 1)
+        self.transcription_options_changed.emit(self.transcription_options)
+
     def on_vad_enabled_changed(self, state: int):
         self.transcription_options.enable_vad = state == 2
         self.transcription_options_changed.emit(self.transcription_options)
         self.vad_threshold_spin_box.setEnabled(self.transcription_options.enable_vad)
         silenced = self.transcription_options.enable_vad
-        self.silence_threshold_label.setVisible(not silenced)
-        self.silence_threshold_spin_box.setVisible(not silenced)
+        self.silence_threshold_label.setEnabled(not silenced)
+        self.silence_threshold_spin_box.setEnabled(not silenced)
 
     def on_vad_threshold_changed(self, value: float):
         self.transcription_options.vad_threshold = round(value, 2)

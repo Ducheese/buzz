@@ -158,6 +158,7 @@ class TranscriptionOptions:
     enable_vad: bool = False
     vad_threshold: float = 0.5
     segment_length: float = 5.0
+    overlap_seconds: float = 0.5
 
 
 def humanize_language(language: str) -> str:

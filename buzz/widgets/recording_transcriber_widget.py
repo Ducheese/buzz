@@ -170,6 +170,10 @@ class RecordingTranscriberWidget(QWidget):
                 key=Settings.Key.RECORDING_TRANSCRIBER_SEGMENT_LENGTH,
                 default_value=5.0,
             ),
+            overlap_seconds=self.settings.value(
+                key=Settings.Key.RECORDING_TRANSCRIBER_OVERLAP_SECONDS,
+                default_value=0.5,
+            ),
         )
 
         self.audio_devices_combo_box = AudioDevicesComboBox(self)
@@ -1342,4 +1346,8 @@ class RecordingTranscriberWidget(QWidget):
         self.settings.set_value(
             Settings.Key.RECORDING_TRANSCRIBER_SEGMENT_LENGTH,
             self.transcription_options.segment_length,
+        )
+        self.settings.set_value(
+            Settings.Key.RECORDING_TRANSCRIBER_OVERLAP_SECONDS,
+            self.transcription_options.overlap_seconds,
         )

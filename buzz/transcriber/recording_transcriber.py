@@ -63,9 +63,7 @@ class RecordingTranscriber(QObject):
         self.sample_rate = sample_rate if sample_rate is not None else whisper_audio.SAMPLE_RATE
         self.model_path = model_path
         self.n_batch_samples = int(transcription_options.segment_length * self.sample_rate)
-        self.keep_sample_seconds = 0.15
-        if self.transcriber_mode == RecordingTranscriberMode.APPEND_AND_CORRECT:
-            self.keep_sample_seconds = 1.5
+        self.keep_sample_seconds = transcription_options.overlap_seconds
         # pause queueing if more than 3 batches behind
         self.max_queue_size = 3 * self.n_batch_samples
         self.queue = np.ndarray([], dtype=np.float32)
@@ -182,10 +180,7 @@ class RecordingTranscriber(QObject):
                             self.queue[:self.n_batch_samples], self.sample_rate
                         )
                         samples = self.queue[:cut]
-                        if self.transcriber_mode == RecordingTranscriberMode.APPEND_AND_CORRECT:
-                            self.queue = self.queue[cut - keep_samples:]
-                        else:
-                            self.queue = self.queue[cut:]
+                        self.queue = self.queue[cut - keep_samples:]
                         self.mutex.release()
 
                         amplitude = self.amplitude(samples)
