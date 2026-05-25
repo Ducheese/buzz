@@ -48,6 +48,7 @@ class Settings:
         PRESENTATION_WINDOW_HIDE_BORDER = "presentation-window/hide-border"
         PRESENTATION_WINDOW_GEOMETRY = "presentation-window/geometry"
         PRESENTATION_WINDOW_MODE = "presentation-window/mode"
+        PRESENTATION_WINDOW_CLICK_THROUGH = "presentation-window/click-through"
 
         FILE_TRANSCRIBER_TASK = "file-transcriber/task"
         FILE_TRANSCRIBER_MODEL = "file-transcriber/model"

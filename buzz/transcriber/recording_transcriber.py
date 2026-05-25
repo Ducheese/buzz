@@ -314,9 +314,6 @@ class RecordingTranscriber(QObject):
 
                         next_text: str = result.get("text")
 
-                        # Update initial prompt between successive recording chunks
-                        initial_prompt = next_text
-
                         logging.debug(
                             "Received next result, length = %s, time taken = %s",
                             len(next_text),

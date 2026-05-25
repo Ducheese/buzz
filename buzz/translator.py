@@ -65,7 +65,7 @@ class Translator(QObject):
                     {"role": "system", "content": self.transcription_options.llm_prompt},
                     {"role": "user", "content": transcript}
                 ],
-                timeout=60.0,
+                timeout=5.0,
                 extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception as e:
@@ -103,7 +103,7 @@ class Translator(QObject):
                     {"role": "system", "content": batch_prompt},
                     {"role": "user", "content": combined}
                 ],
-                timeout=60.0,
+                timeout=5.0,
                 extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception as e:

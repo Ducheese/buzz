@@ -63,7 +63,7 @@ class AdvancedSettingsDialog(QDialog):
             self.on_initial_prompt_changed
         )
 
-        layout.addRow(_("Initial Prompt:"), self.initial_prompt_text_edit)
+        layout.addRow(_("Hotwords:"), self.initial_prompt_text_edit)
 
         translation_settings_title= _("Translation settings")
         translation_settings_title_label = QLabel(f"<h4>{translation_settings_title}</h4>", self)

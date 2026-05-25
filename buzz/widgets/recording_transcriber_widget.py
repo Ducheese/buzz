@@ -287,6 +287,12 @@ class RecordingTranscriberWidget(QWidget):
         self.borderless_cb.stateChanged.connect(self.on_borderless_changed)
         h.addWidget(self.borderless_cb)
 
+        self.clickthrough_cb = QCheckBox(_("Click-Through"), bar)
+        self.clickthrough_cb.setChecked(
+            self.settings.value(Settings.Key.PRESENTATION_WINDOW_CLICK_THROUGH, False))
+        self.clickthrough_cb.stateChanged.connect(self.on_clickthrough_changed)
+        h.addWidget(self.clickthrough_cb)
+
         h.addWidget(QLabel(_("Opacity:"), bar))
         self.opacity_spin = QDoubleSpinBox(bar)
         self.opacity_spin.setRange(0.1, 1.0)
@@ -613,6 +619,11 @@ class RecordingTranscriberWidget(QWidget):
         self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_HIDE_BORDER, state == 2)
         if self.presentation_window:
             self.presentation_window._apply_flag(Qt.WindowType.FramelessWindowHint, state == 2)
+
+    def on_clickthrough_changed(self, state: int):
+        self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_CLICK_THROUGH, state == 2)
+        if self.presentation_window:
+            self.presentation_window._apply_flag(Qt.WindowType.WindowTransparentForInput, state == 2)
 
     def on_opacity_changed(self, value: float):
         self.settings.set_value(Settings.Key.PRESENTATION_WINDOW_OPACITY, value)

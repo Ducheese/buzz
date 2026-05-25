@@ -130,6 +130,8 @@ class PresentationWindow(QWidget):
                           self.settings.value(Settings.Key.PRESENTATION_WINDOW_ALWAYS_ON_TOP, False))
         self._apply_flag(Qt.WindowType.FramelessWindowHint,
                           self.settings.value(Settings.Key.PRESENTATION_WINDOW_HIDE_BORDER, False))
+        self._apply_flag(Qt.WindowType.WindowTransparentForInput,
+                          self.settings.value(Settings.Key.PRESENTATION_WINDOW_CLICK_THROUGH, False))
         self.setWindowOpacity(
             self.settings.value(Settings.Key.PRESENTATION_WINDOW_OPACITY, 1.0, float))
 
