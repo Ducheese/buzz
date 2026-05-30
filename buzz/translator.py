@@ -63,7 +63,7 @@ class Translator(QObject):
                 model=self.transcription_options.llm_model,
                 messages=[
                     {"role": "system", "content": self.transcription_options.llm_prompt},
-                    {"role": "user", "content": transcript}
+                    {"role": "user", "content": f"以下是待译原文:\n{transcript}"}
                 ],
                 timeout=5.0,
                 extra_body={"thinking": {"type": "disabled"}},
@@ -85,7 +85,7 @@ class Translator(QObject):
         Returns list of (translation, transcript_id) in the same order as input."""
         numbered_parts = []
         for i, (transcript, _) in enumerate(items, 1):
-            numbered_parts.append(f"[{i}] {transcript}")
+            numbered_parts.append(f"[{i}] 以下是待译原文:\n{transcript}")
         combined = "\n".join(numbered_parts)
 
         batch_prompt = (

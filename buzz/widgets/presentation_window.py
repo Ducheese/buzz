@@ -22,6 +22,7 @@ class PresentationWindow(QWidget):
         self._saved_single_t = ""
         self._saved_single_x = ""
         self._saved_single_sep = "\n\n"
+        self._saved_pairs: list[tuple[str, str]] = []
         self.window_style = ""
         self.setWindowTitle(_("Live Transcript Presentation"))
         self.setWindowFlag(Qt.WindowType.Window)
@@ -136,8 +137,10 @@ class PresentationWindow(QWidget):
             self.settings.value(Settings.Key.PRESENTATION_WINDOW_OPACITY, 1.0, float))
 
         # Re-apply single mode if active
-        if (self._saved_single_t or self._saved_single_x) and \
-           self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split") == "single":
+        if self._saved_pairs:
+            self._render_pairs(self._saved_pairs)
+        elif (self._saved_single_t or self._saved_single_x) and \
+             self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split") == "single":
             self._render_interleaved()
 
     def _apply_flag(self, flag: Qt.WindowType, on: bool):
@@ -254,6 +257,49 @@ class PresentationWindow(QWidget):
         self._saved_single_x = translation_text
         self._saved_single_sep = line_sep
         self._render_interleaved()
+
+    def set_interleaved_pairs(self, pairs: list[tuple[str, str]], line_sep: str):
+        """Render pre-paired (transcript, translation) list in T_i, X_i order.
+        Renders directly from pairs — no split involved, text content cannot affect alignment."""
+        self._saved_pairs = pairs
+        self._saved_single_t = line_sep.join(t for t, _ in pairs)
+        self._saved_single_x = line_sep.join(x for _, x in pairs)
+        self._saved_single_sep = line_sep
+        self._render_pairs(pairs)
+
+    def _render_pairs(self, pairs: list[tuple[str, str]]):
+        """Render from pre-paired list directly. No split — text content cannot cause misalignment."""
+        import re
+        def _extract(css: str, prop: str) -> str:
+            m = re.search(rf'{prop}:\s*([^;]+);', css)
+            return m.group(1).strip() if m else ""
+
+        t_color = _extract(self._transcript_style, "color")
+        t_font = _extract(self._transcript_style, "font-family")
+        t_size = _extract(self._transcript_style, "font-size")
+        x_color = _extract(self._translation_style, "color")
+        x_font = _extract(self._translation_style, "font-family")
+        x_size = _extract(self._translation_style, "font-size")
+        bg = _extract(self._transcript_style, "background-color") or "#000"
+
+        def esc(s: str) -> str:
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+        parts = []
+        for t, x in pairs:
+            if t:
+                parts.append(
+                    f'<span style="color:{t_color};font-family:{t_font};font-size:{t_size}">{esc(t)}</span>')
+            if x:
+                parts.append(
+                    f'<span style="color:{x_color};font-family:{x_font};font-size:{x_size}">{esc(x)}</span>')
+
+        html = "<br>".join(parts)
+        self.translation_display.hide()
+        self.transcript_display.show()
+        self.transcript_display.setHtml(
+            f'<html><body style="background:{bg}">{html}</body></html>')
+        self.transcript_display.moveCursor(QTextCursor.MoveOperation.End)
 
     def _render_interleaved(self):
         import re

@@ -100,6 +100,10 @@ class RecordingTranscriberWidget(QWidget):
         self.translator = None
         self.transcripts = []
         self.translations = []
+        self._pair_transcripts: list[str] = []
+        self._pair_translations: dict[int, str] = {}
+        self._pair_index: dict[int, int] = {}
+        self._next_pair_seq = 0
         self.current_status = self.RecordingStatus.STOPPED
         self.setWindowTitle(_("Live Recording"))
 
@@ -641,10 +645,10 @@ class RecordingTranscriberWidget(QWidget):
             return
         mode = self.settings.value(Settings.Key.PRESENTATION_WINDOW_MODE, "split")
         if mode == "single" and self.transcription_options.enable_llm_translation:
-            self.presentation_window.set_interleaved(
-                self.transcription_text_box.toPlainText(),
-                self.translation_text_box.toPlainText(),
-                self.transcription_options.line_separator)
+            pairs = [(t, self._pair_translations.get(seq, ""))
+                     for seq, t in enumerate(self._pair_transcripts)]
+            self.presentation_window.set_interleaved_pairs(
+                pairs, self.transcription_options.line_separator)
         else:
             t = self.transcription_text_box.toPlainText()
             if t:
@@ -816,6 +820,10 @@ class RecordingTranscriberWidget(QWidget):
 
         self.transcription_text_box.clear()
         self.translation_text_box.clear()
+        self._pair_transcripts.clear()
+        self._pair_translations.clear()
+        self._pair_index.clear()
+        self._next_pair_seq = 0
 
         if self.export_enabled:
             self.setup_for_export()
@@ -1146,7 +1154,11 @@ class RecordingTranscriberWidget(QWidget):
             return
 
         if self.translator is not None:
-            self.translator.enqueue(text)
+            seq = self._next_pair_seq
+            self._next_pair_seq += 1
+            self.translator.enqueue(text, seq)
+            self._pair_transcripts.append(text)
+            self._pair_index[seq] = len(self._pair_transcripts) - 1
 
         if self.transcriber_mode == RecordingTranscriberMode.APPEND_BELOW:
             self.transcription_text_box.moveCursor(QTextCursor.MoveOperation.End)
@@ -1211,8 +1223,13 @@ class RecordingTranscriberWidget(QWidget):
             except Exception as e:
                 logging.error(f"Transcript upload failed: {str(e)}")
 
-    def on_next_translation(self, text: str, _: Optional[int] = None):
+    def on_next_translation(self, text: str, seq: Optional[int] = None):
+        if seq is not None:
+            self._pair_translations[seq] = text
+
         if len(text) == 0:
+            if self.presentation_window and self.presentation_window.isVisible():
+                self._sync_presentation()
             return
 
         if self.transcriber_mode == RecordingTranscriberMode.APPEND_BELOW:
